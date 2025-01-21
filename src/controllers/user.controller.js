@@ -1,7 +1,7 @@
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ApiError } from "../utils/ApiError.js";
 import { User } from "../models/user.model.js"
-import { uploadOnCloudinary } from "../utils/cloudinary.js";
+import { deleteImageFromCloudinary, uploadOnCloudinary } from "../utils/cloudinary.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
@@ -248,12 +248,15 @@ const updateUserAvatar = asyncHandler(async (req, res) => {
     if (!avatarLocalPath) {
         throw new ApiError(400, "Avatar file is missing")
     }
-
-
+    
     const avatar = await uploadOnCloudinary(avatarLocalPath)
     if (!avatar.url) {
         throw new ApiError(500, "Error while uploading avatar")
-
+    }
+    const currentUser = await User.findById(req.user?._id)
+    const deletedAvatar = await deleteImageFromCloudinary(currentUser.avatar)
+    if(!deletedAvatar){
+        throw new ApiError(500, "Problem while deleting previous avatar file from cloudinary")
     }
     const user = await User.findByIdAndUpdate(
         req.user?._id,
@@ -263,24 +266,7 @@ const updateUserAvatar = asyncHandler(async (req, res) => {
             }
         },
         { new: true }
-    ).select("-password")
-
-    // const updatedUser = await User.findById(req.user?._id);
-    // if (!updatedUser) {
-    //     throw new ApiError(404, "User not found");
-    // }
-
-    // // Delete the previous avatar from Cloudinary if it exists
-    // if (updatedUser.avatar) {
-    //     try {
-    //         const fileName = updatedUser.avatar.split("/").pop().split(".")[0]; // Extract file name without extension
-    //         await cloudinary.uploader.destroy(fileName); // Delete the image from Cloudinary
-    //     } catch (error) {
-    //         console.error("Failed to delete old avatar from Cloudinary:", error.message);
-    //         // You can log or handle this error if deletion is not critical
-    //         throw new ApiError(400, "Previous image deletion faced some issue");
-    //     }
-    // }
+    ).select("-password")    
 
     return res.status(200).json(
         new ApiResponse(200, user, "Avatar updated successfully")
@@ -297,8 +283,14 @@ const updateUserCoverImage = asyncHandler(async (req, res) => {
     const coverImage = await uploadOnCloudinary(coverImageLocalPath)
     if (!coverImage.url) {
         throw new ApiError(400, "Error while uploading Cover Image")
-
     }
+
+    const currentUser = await User.findById(req.user?._id)
+    const deletedCoverImage = await deleteImageFromCloudinary(currentUser.coverImage)
+    if(!deletedCoverImage){
+        throw new ApiError(500, "Problem while deleting previous cover image from cloudinary")
+    }
+
     const user = await User.findByIdAndUpdate(
         req.user?._id,
         {
@@ -308,6 +300,8 @@ const updateUserCoverImage = asyncHandler(async (req, res) => {
         },
         { new: true }
     ).select("-password")
+
+    
 
     return res.status(200).json(
         new ApiResponse(200, user, "Cover Image updated successfully")
